@@ -21,6 +21,7 @@ function TextureButton:update()
         and mouseY < self.y + TEXTURE_BUTTON_WIDTH
         then 
         pSystem:setTexture(self.textureImage)
+        currentTextureName = self.imageName
     end
 end
 

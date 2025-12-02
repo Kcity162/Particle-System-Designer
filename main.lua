@@ -20,10 +20,12 @@ PALETTE_IMAGE_PATH = 'palette_160.png'
 MAX_PARTICLES = 20000
 TEXTURE_DIRECTORY = 'textures/'
 TEXTURE_IMAGE_FORMAT = '.png'
+SAVE_DIRECTORY = '/Users/kevin.torrington/Documents/code/Dreambound/assets/effects/'
 
 --Other Global Params
 BLACK = {0,0,0,1}
 WHITE = {1,1,1,1}
+
 
 
 function love.load()
@@ -78,8 +80,12 @@ function love.load()
     mouseX = 0
     mouseY = 0
     startSize = 1
+    midSize = 1
     endSize = 1
     thirdColor = true
+    currentTextureName = 'cloud' -- Track current texture
+    saveMessage = ''
+    saveMessageTimer = 0
 end
 
 
@@ -121,6 +127,14 @@ function love.update(dt)
     end
     pSystem:setSizes(startSize, midSize, endSize)
     pSystem:update(dt)
+    
+    --Update save message timer
+    if saveMessageTimer > 0 then
+        saveMessageTimer = saveMessageTimer - dt
+        if saveMessageTimer <= 0 then
+            saveMessage = ''
+        end
+    end
 end
 
 function love.draw()
@@ -163,6 +177,10 @@ end
 function love.keypressed(key)
     if key == 'escape' then 
         love.event.quit()
+    elseif key == 's' and (love.keyboard.isDown('lctrl') or love.keyboard.isDown('rctrl')) then
+        saveParticleSystem()
+    elseif key == 'o' and (love.keyboard.isDown('lctrl') or love.keyboard.isDown('rctrl')) then
+        loadParticleSystem()
     end
 end
 
@@ -171,6 +189,14 @@ end
 function infoPrint() --Print helpful info to screen top/center
     love.graphics.printf('Particle Count: '..string.format('%.2f',pSystem:getCount()), 0, 10, WINDOW_WIDTH, 'center')
     love.graphics.printf('Frames Per Second: '..string.format('%.2f', love.timer.getFPS()), 0, 30, WINDOW_WIDTH, 'center')
+    if saveMessage ~= '' then
+        love.graphics.setColor(0, 1, 0, 1)
+        love.graphics.printf(saveMessage, 0, 50, WINDOW_WIDTH, 'center')
+        love.graphics.setColor(WHITE)
+    end
+    love.graphics.setColor(.5, .5, .5, 1)
+    love.graphics.printf('Ctrl+S to Save | Ctrl+O to Load', 0, WINDOW_HEIGHT - 20, WINDOW_WIDTH, 'center')
+    love.graphics.setColor(WHITE)
 end
 
 function setSliderXY()
@@ -221,4 +247,172 @@ function populateColorPalettes()
     colorPalettes [1] = newColorPalette(PALETTE_IMAGE_PATH, cP1X, cPY, 'First Color')
     colorPalettes [2] = newColorPalette(PALETTE_IMAGE_PATH, cP2X, cPY, 'Second Color')
     colorPalettes [3] = newColorPalette(PALETTE_IMAGE_PATH, cP2X, cPY - COLOR_PALETTE_WIDTH -60 , 'Third Color')
+end
+
+function saveParticleSystem()
+    -- Collect all slider values
+    local sliderValues = {}
+    for i, slider in pairs(sliders) do
+        if type(slider) ~= 'string' then
+            sliderValues[slider:getLabel()] = slider:getValue()
+        end
+    end
+    
+    -- Create save data table
+    local saveData = {
+        texture = currentTextureName,
+        colors = {
+            {r = r1, g = g1, b = b1, a = a1},
+            {r = r2, g = g2, b = b2, a = a2},
+            {r = r3, g = g3, b = b3, a = a3}
+        },
+        thirdColor = thirdColor,
+        sizes = {
+            start = startSize,
+            mid = midSize,
+            endSize = endSize
+        },
+        sliders = sliderValues
+    }
+    
+    -- Convert to Lua code string
+    local saveString = 'return {\n'
+    saveString = saveString .. '    texture = "' .. saveData.texture .. '",\n'
+    saveString = saveString .. '    thirdColor = ' .. tostring(saveData.thirdColor) .. ',\n'
+    saveString = saveString .. '    colors = {\n'
+    for i, color in ipairs(saveData.colors) do
+        saveString = saveString .. string.format('        {r = %.6f, g = %.6f, b = %.6f, a = %.6f},\n', 
+            color.r, color.g, color.b, color.a)
+    end
+    saveString = saveString .. '    },\n'
+    saveString = saveString .. '    sizes = {\n'
+    saveString = saveString .. string.format('        start = %.6f,\n', saveData.sizes.start)
+    saveString = saveString .. string.format('        mid = %.6f,\n', saveData.sizes.mid)
+    saveString = saveString .. string.format('        endSize = %.6f,\n', saveData.sizes.endSize)
+    saveString = saveString .. '    },\n'
+    saveString = saveString .. '    sliders = {\n'
+    for label, value in pairs(saveData.sliders) do
+        saveString = saveString .. string.format('        ["%s"] = %.6f,\n', label, value)
+    end
+    saveString = saveString .. '    }\n'
+    saveString = saveString .. '}\n'
+    
+    -- Write to file using standard Lua io library for absolute paths
+    local filePath = SAVE_DIRECTORY .. 'particle_system.lua'
+    local file, err = io.open(filePath, 'w')
+    if file then
+        file:write(saveString)
+        file:close()
+        saveMessage = 'Particle system saved successfully!'
+        saveMessageTimer = 3
+    else
+        -- Try creating directory if it doesn't exist
+        os.execute('mkdir -p "' .. SAVE_DIRECTORY .. '"')
+        file, err = io.open(filePath, 'w')
+        if file then
+            file:write(saveString)
+            file:close()
+            saveMessage = 'Particle system saved successfully!'
+            saveMessageTimer = 3
+        else
+            saveMessage = 'Error saving: ' .. tostring(err)
+            saveMessageTimer = 3
+        end
+    end
+end
+
+function loadParticleSystem()
+    -- Check if save file exists using standard Lua io library
+    local filePath = SAVE_DIRECTORY .. 'particle_system.lua'
+    local file = io.open(filePath, 'r')
+    if not file then
+        saveMessage = 'No save file found!'
+        saveMessageTimer = 3
+        return
+    end
+    file:close()
+    
+    -- Load the save file
+    local success, saveData = pcall(function()
+        local chunk = loadfile(filePath)
+        if chunk then
+            return chunk()
+        else
+            return nil
+        end
+    end)
+    
+    if not success or not saveData then
+        saveMessage = 'Error loading save file!'
+        saveMessageTimer = 3
+        return
+    end
+    
+    -- Load texture
+    if saveData.texture then
+        local texturePath = TEXTURE_DIRECTORY .. saveData.texture .. TEXTURE_IMAGE_FORMAT
+        if love.filesystem.getInfo(texturePath) then
+            texture = love.graphics.newImage(texturePath)
+            pSystem:setTexture(texture)
+            currentTextureName = saveData.texture
+        end
+    end
+    
+    -- Load colors
+    if saveData.colors then
+        if saveData.colors[1] then
+            r1, g1, b1, a1 = saveData.colors[1].r, saveData.colors[1].g, saveData.colors[1].b, saveData.colors[1].a
+            colorPalettes[1].r, colorPalettes[1].g, colorPalettes[1].b, colorPalettes[1].a = r1, g1, b1, a1
+            colorPalettes[1].slider.value = math.max(0, math.min(1, (a1 - colorPalettes[1].slider.min) / (colorPalettes[1].slider.max - colorPalettes[1].slider.min)))
+            -- Set circle to center (visual indicator - actual color values are what matter)
+            colorPalettes[1].circleX = colorPalettes[1].x + colorPalettes[1].width/2
+            colorPalettes[1].circleY = colorPalettes[1].y + colorPalettes[1].width/2
+        end
+        if saveData.colors[2] then
+            r2, g2, b2, a2 = saveData.colors[2].r, saveData.colors[2].g, saveData.colors[2].b, saveData.colors[2].a
+            colorPalettes[2].r, colorPalettes[2].g, colorPalettes[2].b, colorPalettes[2].a = r2, g2, b2, a2
+            colorPalettes[2].slider.value = math.max(0, math.min(1, (a2 - colorPalettes[2].slider.min) / (colorPalettes[2].slider.max - colorPalettes[2].slider.min)))
+            colorPalettes[2].circleX = colorPalettes[2].x + colorPalettes[2].width/2
+            colorPalettes[2].circleY = colorPalettes[2].y + colorPalettes[2].width/2
+        end
+        if saveData.colors[3] then
+            r3, g3, b3, a3 = saveData.colors[3].r, saveData.colors[3].g, saveData.colors[3].b, saveData.colors[3].a
+            colorPalettes[3].r, colorPalettes[3].g, colorPalettes[3].b, colorPalettes[3].a = r3, g3, b3, a3
+            colorPalettes[3].slider.value = math.max(0, math.min(1, (a3 - colorPalettes[3].slider.min) / (colorPalettes[3].slider.max - colorPalettes[3].slider.min)))
+            colorPalettes[3].circleX = colorPalettes[3].x + colorPalettes[3].width/2
+            colorPalettes[3].circleY = colorPalettes[3].y + colorPalettes[3].width/2
+        end
+    end
+    
+    -- Load thirdColor flag
+    if saveData.thirdColor ~= nil then
+        thirdColor = saveData.thirdColor
+    end
+    
+    -- Load sizes
+    if saveData.sizes then
+        if saveData.sizes.start then startSize = saveData.sizes.start end
+        if saveData.sizes.mid then midSize = saveData.sizes.mid end
+        if saveData.sizes.endSize then endSize = saveData.sizes.endSize end
+    end
+    
+    -- Load slider values
+    if saveData.sliders then
+        for i, slider in pairs(sliders) do
+            if type(slider) ~= 'string' then
+                local label = slider:getLabel()
+                if saveData.sliders[label] then
+                    local value = saveData.sliders[label]
+                    slider.value = (value - slider.min) / (slider.max - slider.min)
+                    slider.value = math.max(0, math.min(1, slider.value))
+                    if slider.setter then
+                        slider.setter(value)
+                    end
+                end
+            end
+        end
+    end
+    
+    saveMessage = 'Particle system loaded successfully!'
+    saveMessageTimer = 3
 end

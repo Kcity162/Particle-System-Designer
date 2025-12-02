@@ -1,0 +1,43 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Run Love2D",
+        "type": "shell",
+        "command": "/Applications/love.app/Contents/MacOS/love",
+        "args": [
+          "${workspaceFolder}"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "problemMatcher": [],
+        "presentation": {
+          "reveal": "always",
+          "panel": "dedicated"
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
+      },
+      {
+        "label": "Watch and Auto-Run Love2D",
+        "type": "shell",
+        "command": "python3",
+        "args": [
+          "${workspaceFolder}/.vscode/watch-love.py"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "problemMatcher": [],
+        "presentation": {
+          "reveal": "always",
+          "panel": "dedicated",
+          "focus": false
+        },
+        "isBackground": true
+      }
+    ]
+  }
